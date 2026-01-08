@@ -47,6 +47,14 @@ def initialize_models():
     logger.info("Progress: 10% - Slack client ready")
 
     logger.info("Loading embedding model...")
+    logger.info("Checking HF cache directory...")
+    import os
+    hf_cache = os.path.expanduser("~/.cache/huggingface")
+    logger.info(f"HF cache exists: {os.path.exists(hf_cache)}")
+    if os.path.exists(hf_cache):
+        logger.info(f"HF cache contents: {os.listdir(hf_cache)}")
+
+    logger.info("Creating SentenceTransformer instance...")
     # SentenceTransformer automatically uses cached models, no need for local_files_only
     embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
     initialization_progress = 30
@@ -267,10 +275,14 @@ def background_init():
     """Initialize models in background"""
     try:
         logger.info("Starting background model initialization...")
+        logger.info("About to call initialize_models()...")
         initialize_models()
         logger.info("Background initialization complete")
     except Exception as e:
-        logger.error(f"Failed to initialize models: {str(e)}", exc_info=True)
+        logger.error(f"CRITICAL: Failed to initialize models: {str(e)}", exc_info=True)
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
 
 # Start initialization in background thread
 init_thread = threading.Thread(target=background_init, daemon=True)
