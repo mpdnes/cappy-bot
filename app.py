@@ -234,14 +234,14 @@ def root():
     """Root endpoint"""
     return jsonify({'message': 'Cappy Bot is running'}), 200
 
-if __name__ == '__main__':
-    # Initialize models at startup
-    logger.info("Starting Cappy Bot...")
-    initialize_models()
+# Initialize models when module is loaded (for gunicorn --preload)
+logger.info("Starting Cappy Bot...")
+initialize_models()
 
+if __name__ == '__main__':
     # Get port from environment (Cloud Run provides this)
     port = int(os.environ.get('PORT', 8080))
 
-    # Run Flask app
+    # Run Flask app (models already initialized at module level)
     logger.info(f"Starting Flask app on port {port}...")
     app.run(host='0.0.0.0', port=port, debug=False)
