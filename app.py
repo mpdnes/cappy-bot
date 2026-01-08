@@ -5,6 +5,7 @@ Runs on Google Cloud Run with zero-cost hosting
 """
 import os
 import logging
+import threading
 from flask import Flask, request, jsonify
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -136,6 +137,17 @@ def process_question(question, channel, thread_ts=None):
     Process a question through the RAG pipeline and post response to Slack
     """
     try:
+        # Check if models are loaded yet
+        if embedding_model is None or llm_model is None:
+            logger.warning("Models not yet loaded, sending waiting message")
+            if slack_client:
+                slack_client.chat_postMessage(
+                    channel=channel,
+                    text="I'm still initializing (downloading models). This takes about 2-3 minutes on first startup. Please try again in a moment!",
+                    thread_ts=thread_ts
+                )
+            return
+
         logger.info(f"Processing question: {question}")
 
         # Step 1: Retrieve relevant chunks
@@ -234,9 +246,20 @@ def root():
     """Root endpoint"""
     return jsonify({'message': 'Cappy Bot is running'}), 200
 
-# Initialize models when module is loaded (for gunicorn --preload)
-logger.info("Starting Cappy Bot...")
-initialize_models()
+# Initialize models in background thread to avoid startup timeout
+def background_init():
+    """Initialize models in background"""
+    try:
+        logger.info("Starting background model initialization...")
+        initialize_models()
+        logger.info("Background initialization complete")
+    except Exception as e:
+        logger.error(f"Failed to initialize models: {str(e)}", exc_info=True)
+
+# Start initialization in background thread
+init_thread = threading.Thread(target=background_init, daemon=True)
+init_thread.start()
+logger.info("Cappy Bot starting - models loading in background...")
 
 if __name__ == '__main__':
     # Get port from environment (Cloud Run provides this)
