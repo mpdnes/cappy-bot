@@ -47,7 +47,8 @@ def initialize_models():
     logger.info("Progress: 10% - Slack client ready")
 
     logger.info("Loading embedding model...")
-    embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', local_files_only=True)
+    # SentenceTransformer automatically uses cached models, no need for local_files_only
+    embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
     initialization_progress = 30
     logger.info("Progress: 30% - Embedding model loaded")
 
