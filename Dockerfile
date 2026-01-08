@@ -1,7 +1,5 @@
-# Use Python 3.11 slim image for smaller size
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
 # Install system dependencies
@@ -10,26 +8,21 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (for layer caching)
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download embedding model (small, ~90MB)
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
-# Note: Qwen model (~3GB) will download on first container startup to avoid build OOM
+# --- NEW: Download models without loading into RAM (Prevents OOM) ---
+# This saves the files to /root/.cache/huggingface
+RUN python -c "from huggingface_hub import snapshot_download; \
+    snapshot_download(repo_id='sentence-transformers/all-MiniLM-L6-v2'); \
+    snapshot_download(repo_id='Qwen/Qwen2.5-1.5B-Instruct')"
 
-# Copy application files
 COPY handbook.md .
 COPY build_index.py .
 COPY app.py .
 
-# Build ChromaDB index at build time (included in container image)
+# Build the ChromaDB index
 RUN python build_index.py
 
-# Expose port (Cloud Run will override with $PORT)
-EXPOSE 8080
-
-# Run with gunicorn for production
-CMD exec gunicorn --bind :$PORT --workers 1 --threads 2 --timeout 60 --preload app:app
+# Use --timeout 0 to prevent Gunicorn from killing the app during model load
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 app:app
