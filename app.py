@@ -31,38 +31,49 @@ llm_tokenizer = None
 llm_model = None
 chroma_client = None
 chroma_collection = None
+initialization_progress = 0  # Track initialization progress (0-100)
 
 def initialize_models():
     """Initialize all models and clients at startup"""
     global slack_client, embedding_model, llm_tokenizer, llm_model
-    global chroma_client, chroma_collection
+    global chroma_client, chroma_collection, initialization_progress
 
     logger.info("Initializing Slack client...")
     slack_token = os.environ.get('SLACK_BOT_TOKEN')
     if not slack_token:
         raise ValueError("SLACK_BOT_TOKEN environment variable not set")
     slack_client = WebClient(token=slack_token)
+    initialization_progress = 10
+    logger.info("Progress: 10% - Slack client ready")
 
     logger.info("Loading embedding model...")
-    embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+    embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', local_files_only=True)
+    initialization_progress = 30
+    logger.info("Progress: 30% - Embedding model loaded")
 
-    logger.info("Loading LLM tokenizer and model...")
+    logger.info("Loading LLM tokenizer and model (using baked-in files)...")
     model_name = "Qwen/Qwen2.5-1.5B-Instruct"
-    llm_tokenizer = AutoTokenizer.from_pretrained(model_name)
+    initialization_progress = 40
+    llm_tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
+    initialization_progress = 50
+    logger.info("Progress: 50% - Tokenizer loaded, loading LLM model into RAM...")
     llm_model = AutoModelForCausalLM.from_pretrained(
         model_name,
         torch_dtype=torch.float32,  # Use float32 for CPU
         device_map="cpu",
-        low_cpu_mem_usage=True
+        low_cpu_mem_usage=True,
+        local_files_only=True  # Critical: use baked-in model files
     )
     llm_model.eval()  # Set to evaluation mode
+    initialization_progress = 90
+    logger.info("Progress: 90% - LLM model loaded")
 
     logger.info("Connecting to ChromaDB...")
     persist_directory = "/app/chroma_db"
     chroma_client = chromadb.PersistentClient(path=persist_directory)
     chroma_collection = chroma_client.get_collection("handbook")
-
-    logger.info("All models initialized successfully")
+    initialization_progress = 100
+    logger.info("Progress: 100% - All models initialized successfully!")
 
 def retrieve_relevant_chunks(query, top_k=3):
     """
@@ -139,11 +150,15 @@ def process_question(question, channel, thread_ts=None):
     try:
         # Check if models are loaded yet
         if embedding_model is None or llm_model is None:
-            logger.warning("Models not yet loaded, sending waiting message")
+            logger.warning(f"Models not yet loaded (progress: {initialization_progress}%), sending waiting message")
             if slack_client:
+                if initialization_progress < 50:
+                    message = f"I'm initializing... {initialization_progress}% complete. Loading models into memory. This takes about 15-20 seconds on first startup!"
+                else:
+                    message = f"Almost ready! {initialization_progress}% complete. Loading the LLM model (this is the slow part)..."
                 slack_client.chat_postMessage(
                     channel=channel,
-                    text="I'm still initializing (downloading models). This takes about 2-3 minutes on first startup. Please try again in a moment!",
+                    text=message,
                     thread_ts=thread_ts
                 )
             return

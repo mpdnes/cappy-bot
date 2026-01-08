@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- NEW: Download models without loading into RAM (Prevents OOM) ---
-# This saves the files to /root/.cache/huggingface
+# Download models without loading into RAM (avoids OOM during build)
+# This saves files to /root/.cache/huggingface and bakes them into the image
 RUN python -c "from huggingface_hub import snapshot_download; \
     snapshot_download(repo_id='sentence-transformers/all-MiniLM-L6-v2'); \
     snapshot_download(repo_id='Qwen/Qwen2.5-1.5B-Instruct')"
@@ -24,5 +24,9 @@ COPY app.py .
 # Build the ChromaDB index
 RUN python build_index.py
 
-# Use --timeout 0 to prevent Gunicorn from killing the app during model load
+# Expose port (Cloud Run will override with $PORT)
+EXPOSE 8080
+
+# Run with gunicorn for production
+# timeout 0 prevents killing app during model load (models are baked in, just need RAM load time)
 CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 app:app
