@@ -16,9 +16,9 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download models to avoid cold start delays
+# Pre-download embedding model (small, ~90MB)
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
-RUN python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('Qwen/Qwen2.5-1.5B-Instruct'); AutoModelForCausalLM.from_pretrained('Qwen/Qwen2.5-1.5B-Instruct')"
+# Note: Qwen model (~3GB) will download on first container startup to avoid build OOM
 
 # Copy application files
 COPY handbook.md .
